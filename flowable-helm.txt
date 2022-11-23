@@ -1,0 +1,129 @@
+---
+# Source: flowable/charts/postgres/templates/secrets.yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: release-name-postgres
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: postgres
+    helm.sh/chart: postgres-11.6.10
+    app.kubernetes.io/instance: release-name
+    app.kubernetes.io/managed-by: Helm
+type: Opaque
+data:
+  postgres-password: "NkJpYU55VFE2ag=="
+  password: "Zmxvd2FibGU="
+  # We don't auto-generate LDAP password when it's not provided as we do for other passwords
+  
+  
+---
+# Source: flowable/charts/elasticsearch/templates/service.yaml
+kind: Service
+apiVersion: v1
+metadata:
+  name: flowable-elasticsearch-master
+  labels:
+    heritage: "Helm"
+    release: "release-name"
+    chart: "elasticsearch"
+    app: "flowable-elasticsearch-master"
+  annotations:
+    {}
+spec:
+  type: ClusterIP
+  selector:
+    release: "release-name"
+    chart: "elasticsearch"
+    app: "flowable-elasticsearch-master"
+  publishNotReadyAddresses: false
+  ports:
+  - name: http
+    protocol: TCP
+    port: 9200
+  - name: transport
+    protocol: TCP
+    port: 9300
+---
+# Source: flowable/charts/elasticsearch/templates/service.yaml
+kind: Service
+apiVersion: v1
+metadata:
+  name: flowable-elasticsearch-master-headless
+  labels:
+    heritage: "Helm"
+    release: "release-name"
+    chart: "elasticsearch"
+    app: "flowable-elasticsearch-master"
+  annotations:
+    service.alpha.kubernetes.io/tolerate-unready-endpoints: "true"
+spec:
+  clusterIP: None # This is needed for statefulset hostnames like elasticsearch-0 to resolve
+  # Create endpoints also if the related pod isn't ready
+  publishNotReadyAddresses: true
+  selector:
+    app: "flowable-elasticsearch-master"
+  ports:
+  - name: http
+    port: 9200
+  - name: transport
+    port: 9300
+---
+# Source: flowable/charts/postgres/templates/primary/svc-headless.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: release-name-postgres-hl
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: postgres
+    helm.sh/chart: postgres-11.6.10
+    app.kubernetes.io/instance: release-name
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: primary
+    # Use this annotation in addition to the actual publishNotReadyAddresses
+    # field below because the annotation will stop being respected soon but the
+    # field is broken in some versions of Kubernetes:
+    # https://github.com/kubernetes/kubernetes/issues/58662
+    service.alpha.kubernetes.io/tolerate-unready-endpoints: "true"
+spec:
+  type: ClusterIP
+  clusterIP: None
+  # We want all pods in the StatefulSet to have their addresses published for
+  # the sake of the other Postgresql pods even before they're ready, since they
+  # have to be able to talk to each other in order to become ready.
+  publishNotReadyAddresses: true
+  ports:
+    - name: tcp-postgresql
+      port: 5432
+      targetPort: tcp-postgresql
+  selector:
+    app.kubernetes.io/name: postgres
+    app.kubernetes.io/instance: release-name
+    app.kubernetes.io/component: primary
+---
+# Source: flowable/charts/postgres/templates/primary/svc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: release-name-postgres
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: postgres
+    helm.sh/chart: postgres-11.6.10
+    app.kubernetes.io/instance: release-name
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: primary
+  annotations:
+spec:
+  type: ClusterIP
+  sessionAffinity: None
+  ports:
+    - name: tcp-postgresql
+      port: 5432
+      targetPort: tcp-postgresql
+      nodePort: null
+  selector:
+    app.kubernetes.io/name: postgres
+    app.kubernetes.io/instance: release-name
+    app.kubernetes.io/component: primary

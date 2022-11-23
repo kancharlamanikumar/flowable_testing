@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: "flow4xflow-work"
+  namespace: "4xflow"
+  labels:
+    app: "flow4xflow-work"

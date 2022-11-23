@@ -1,0 +1,713 @@
+
+---
+# Source: flowable/templates/control-configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: release-name-control-configmap
+data:
+  JAVA_OPTS: "-Xms768m -Xmx768m -Djava.security.egd=file:/dev/./urandom"
+  spring.profiles.active: k8s
+  server.port: "8080"
+  server.use-forward-headers: "true"
+  server.servlet.context-path: ""
+  flowable.control.app.cluster-config.name: "Default Cluster"
+  flowable.control.app.cluster-config.description: "Default Flowable Cluster"
+  flowable.control.app.cluster-config.server-address: http://release-name-work
+  flowable.control.app.cluster-config.context-root: "/"
+  flowable.control.app.cluster-config.port: "8080"
+  flowable.control.app.license-location: "file:/license/flowable.license"
+  flowable.control.app.db-store-enabled: "false"
+  flowable.control.app.cluster-type: work
+  spring.datasource.driver-class-name: org.postgresql.Driver
+  spring.datasource.url: jdbc:postgresql://release-name-postgres:5432/flowable
+  spring.datasource.username: flowable
+  spring.datasource.password: flowable
+  logging.level.root: info
+  logging.file.name: "logs/app.log"
+---
+# Source: flowable/templates/work-configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: release-name-work-configmap
+data:
+  JAVA_OPTS: "-Xms1024m -Xmx1024m -Djava.security.egd=file:/dev/./urandom"
+  spring.profiles.active: k8s
+  server.port: "8080"
+  server.use-forward-headers: "true"
+  server.servlet.session.timeout: 1h
+  server.servlet.context-path: ""
+  flowable.form.app-url-root: ""
+  flowable.content.storage.root-folder: "/data"
+  flowable.action.servlet.load-on-startup: "1"
+  flowable.app.servlet.load-on-startup: "1"
+  flowable.cmmn.servlet.load-on-startup: "1"
+  flowable.content.servlet.load-on-startup: "1"
+  flowable.dmn.servlet.load-on-startup: "1"
+  flowable.work.servlet.load-on-startup: "1"
+  flowable.form.servlet.load-on-startup: "1"
+  flowable.indexing.servlet.load-on-startup: "1"
+  flowable.platform.idm.servlet.load-on-startup: "1"
+  flowable.process.servlet.load-on-startup: "1"
+  flowable.template.servlet.load-on-startup: "1"
+  flowable.license.location: "file:/license/flowable.license"
+  flowable.license.db-store-enabled: "false"
+  management.metrics.export.elastic.enabled: "true"
+  spring.datasource.driver-class-name: org.postgresql.Driver
+  spring.datasource.url: jdbc:postgresql://release-name-postgres:5432/flowable
+  spring.datasource.username: "flowable"
+  spring.datasource.password: "flowable"
+  spring.elasticsearch.rest.uris: http://flowable-elasticsearch-master:9200
+  flowable.async-history.thread-pool.max-pool-size: "64"
+  logging.level.root: info
+  logging.file.name: "logs/app.log"
+  #
+
+---
+# Source: flowable/templates/control.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: release-name-control
+  labels:
+    app.kubernetes.io/name: release-name-control
+    helm.sh/chart: flowable-3.12.0
+    app.kubernetes.io/instance: release-name
+    app.kubernetes.io/managed-by: Helm
+spec:
+  clusterIP: None
+  selector:
+    app.kubernetes.io/name: release-name-control
+    app.kubernetes.io/instance: release-name
+  ports:
+  - name: http
+    protocol: TCP
+    port: 8080
+    targetPort: 8080
+---
+# Source: flowable/templates/work.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: release-name-work
+  labels:
+    app.kubernetes.io/name: release-name-work
+    helm.sh/chart: flowable-3.12.0
+    app.kubernetes.io/instance: release-name
+    app.kubernetes.io/managed-by: Helm
+    type: release-name-flowable-server-service
+spec:
+  clusterIP: None
+  selector:
+    type: release-name-flowable-server
+    app.kubernetes.io/instance: release-name
+  ports:
+  - name: http
+    protocol: TCP
+    port: 8080
+    targetPort: 8080
+---
+# Source: flowable/templates/control.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: release-name-control
+  labels:
+    app.kubernetes.io/name: release-name-control
+    helm.sh/chart: flowable-3.12.0
+    app.kubernetes.io/instance: release-name
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: release-name-control
+      app.kubernetes.io/instance: release-name
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: release-name-control
+        app.kubernetes.io/instance: release-name
+        type: release-name-flowable-control
+      annotations:
+        checksum/config: ce5547faf71cb06c7499224a5203cdf632635ce6dee37346b64e66a61b4c7ded
+    spec:
+      imagePullSecrets:
+        - name: release-name-flowable-regcred
+      initContainers:
+        - name: check-db-ready
+          image: "bitnami/postgresql:12.10.0"
+          command: ['sh', '-c', 'until pg_isready -h release-name-postgres -p 5432 -U flowable; do echo waiting for database; sleep 2; done;']
+      containers:
+      - name: release-name-control
+        image: "artifacts.flowable.com/flowable/flowable-control:3.12.0"
+        ports:
+        - containerPort: 8080
+        readinessProbe:
+          httpGet:
+            path: /actuator/health
+            port: 8080
+          initialDelaySeconds: 60
+          timeoutSeconds: 5
+        livenessProbe:
+          httpGet:
+            path: /actuator/health
+            port: 8080
+          initialDelaySeconds: 60
+          timeoutSeconds: 10
+          failureThreshold: 15
+        envFrom:
+        - configMapRef:
+            name: release-name-control-configmap
+        env:
+        volumeMounts:
+          - name: license
+            mountPath: "/license"
+            readOnly: true
+        resources:
+          limits:
+            cpu: 1000m
+            memory: 1Gi
+          requests:
+            cpu: 100m
+            memory: 1Gi
+      restartPolicy: Always
+      volumes:
+        - name: license
+          secret:
+            secretName: release-name-flowable-license
+---
+# Source: flowable/templates/work.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: release-name-work
+  labels:
+    app.kubernetes.io/name: release-name-work
+    helm.sh/chart: flowable-3.12.0
+    app.kubernetes.io/instance: release-name
+    app.kubernetes.io/managed-by: Helm
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: release-name-work
+      app.kubernetes.io/instance: release-name
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: release-name-work
+        app.kubernetes.io/instance: release-name
+        type: release-name-flowable-server
+      annotations:
+        checksum/config: ad04e343830cd32aedbd0f36062d0b7bd75a6e76edd46856fd99073e4172dbef
+    spec:
+      imagePullSecrets:
+        - name: release-name-flowable-regcred
+      initContainers:
+      - name: check-db-ready
+        image: "bitnami/postgresql:12.10.0"
+        command: ['sh', '-c', 'until pg_isready -h release-name-postgres -p 5432 -U flowable; do echo waiting for database; sleep 2; done;']
+      - name: check-elasticsearch-ready
+        image: busybox
+        command: ['sh', '-c', 'until nslookup flowable-elasticsearch-master; do echo waiting for elasticsearch; sleep 2; done;']
+      containers:
+      - name: release-name-work
+        image: "artifacts.flowable.com/flowable/flowable-work:3.12.0"
+        resources:
+          limits:
+            cpu: 1000m
+            memory: 2Gi
+          requests:
+            cpu: 100m
+            memory: 2Gi
+        ports:
+        - name: http
+          containerPort: 8080
+          protocol: TCP
+        readinessProbe:
+          httpGet:
+            path: /actuator/health
+            port: 8080
+          initialDelaySeconds: 60
+          timeoutSeconds: 5
+        livenessProbe:
+          httpGet:
+            path: /actuator/health
+            port: 8080
+          initialDelaySeconds: 60
+          timeoutSeconds: 10
+          failureThreshold: 10
+        envFrom:
+        - configMapRef:
+            name: release-name-work-configmap
+        env:
+        volumeMounts:
+          - name: license
+            mountPath: "/license"
+            readOnly: true
+          - name: content-storage
+            mountPath: "/data"
+      volumes:
+      - name: license
+        secret:
+          secretName: release-name-flowable-license
+      - name: content-storage
+---
+# Source: flowable/charts/elasticsearch/templates/statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: flowable-elasticsearch-master
+  labels:
+    heritage: "Helm"
+    release: "release-name"
+    chart: "elasticsearch"
+    app: "flowable-elasticsearch-master"
+  annotations:
+    esMajorVersion: "7"
+spec:
+  serviceName: flowable-elasticsearch-master-headless
+  selector:
+    matchLabels:
+      app: "flowable-elasticsearch-master"
+  replicas: 1
+  podManagementPolicy: Parallel
+  updateStrategy:
+    type: RollingUpdate
+  volumeClaimTemplates:
+  - metadata:
+      name: flowable-elasticsearch-master
+    spec:
+      accessModes:
+      - ReadWriteOnce
+      resources:
+        requests:
+          storage: 30Gi
+  template:
+    metadata:
+      name: "flowable-elasticsearch-master"
+      labels:
+        release: "release-name"
+        chart: "elasticsearch"
+        app: "flowable-elasticsearch-master"
+      annotations:
+
+    spec:
+      securityContext:
+        fsGroup: 1000
+        runAsUser: 1000
+      automountServiceAccountToken: true
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: app
+                operator: In
+                values:
+                - "flowable-elasticsearch-master"
+            topologyKey: kubernetes.io/hostname
+      terminationGracePeriodSeconds: 120
+      volumes:
+      enableServiceLinks: true
+      initContainers:
+      - name: configure-sysctl
+        securityContext:
+          runAsUser: 0
+          privileged: true
+        image: "docker.elastic.co/elasticsearch/elasticsearch:7.17.3"
+        imagePullPolicy: "IfNotPresent"
+        command: ["sysctl", "-w", "vm.max_map_count=262144"]
+        resources:
+          {}
+
+      containers:
+      - name: "flowable-elasticsearch"
+        securityContext:
+          capabilities:
+            drop:
+            - ALL
+          runAsNonRoot: true
+          runAsUser: 1000
+        image: "docker.elastic.co/elasticsearch/elasticsearch:7.17.3"
+        imagePullPolicy: "IfNotPresent"
+        readinessProbe:
+          exec:
+            command:
+              - bash
+              - -c
+              - |
+                set -e
+                # If the node is starting up wait for the cluster to be ready (request params: "wait_for_status=green&timeout=1s" )
+                # Once it has started only check that the node itself is responding
+                START_FILE=/tmp/.es_start_file
+
+                # Disable nss cache to avoid filling dentry cache when calling curl
+                # This is required with Elasticsearch Docker using nss < 3.52
+                export NSS_SDB_USE_CACHE=no
+
+                http () {
+                  local path="${1}"
+                  local args="${2}"
+                  set -- -XGET -s
+
+                  if [ "$args" != "" ]; then
+                    set -- "$@" $args
+                  fi
+
+                  if [ -n "${ELASTIC_PASSWORD}" ]; then
+                    set -- "$@" -u "elastic:${ELASTIC_PASSWORD}"
+                  fi
+
+                  curl --output /dev/null -k "$@" "http://127.0.0.1:9200${path}"
+                }
+
+                if [ -f "${START_FILE}" ]; then
+                  echo 'Elasticsearch is already running, lets check the node is healthy'
+                  HTTP_CODE=$(http "/" "-w %{http_code}")
+                  RC=$?
+                  if [[ ${RC} -ne 0 ]]; then
+                    echo "curl --output /dev/null -k -XGET -s -w '%{http_code}' \${BASIC_AUTH} http://127.0.0.1:9200/ failed with RC ${RC}"
+                    exit ${RC}
+                  fi
+                  # ready if HTTP code 200, 503 is tolerable if ES version is 6.x
+                  if [[ ${HTTP_CODE} == "200" ]]; then
+                    exit 0
+                  elif [[ ${HTTP_CODE} == "503" && "7" == "6" ]]; then
+                    exit 0
+                  else
+                    echo "curl --output /dev/null -k -XGET -s -w '%{http_code}' \${BASIC_AUTH} http://127.0.0.1:9200/ failed with HTTP code ${HTTP_CODE}"
+                    exit 1
+                  fi
+
+                else
+                  echo 'Waiting for elasticsearch cluster to become ready (request params: "wait_for_status=green&timeout=1s" )'
+                  if http "/_cluster/health?wait_for_status=green&timeout=1s" "--fail" ; then
+                    touch ${START_FILE}
+                    exit 0
+                  else
+                    echo 'Cluster is not yet ready (request params: "wait_for_status=green&timeout=1s" )'
+                    exit 1
+                  fi
+                fi
+          failureThreshold: 3
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          successThreshold: 3
+          timeoutSeconds: 5
+        ports:
+        - name: http
+          containerPort: 9200
+        - name: transport
+          containerPort: 9300
+        resources:
+          limits:
+            cpu: 1000m
+            memory: 2Gi
+          requests:
+            cpu: 1000m
+            memory: 2Gi
+        env:
+          - name: node.name
+            valueFrom:
+              fieldRef:
+                fieldPath: metadata.name
+          - name: cluster.initial_master_nodes
+            value: "flowable-elasticsearch-master-0,"
+          - name: discovery.seed_hosts
+            value: "flowable-elasticsearch-master-headless"
+          - name: cluster.name
+            value: "elasticsearch"
+          - name: network.host
+            value: "0.0.0.0"
+          - name: cluster.deprecation_indexing.enabled
+            value: "false"
+          - name: node.data
+            value: "true"
+          - name: node.ingest
+            value: "true"
+          - name: node.master
+            value: "true"
+          - name: node.ml
+            value: "true"
+          - name: node.remote_cluster_client
+            value: "true"
+        volumeMounts:
+          - name: "flowable-elasticsearch-master"
+            mountPath: /usr/share/elasticsearch/data
+---
+# Source: flowable/charts/postgres/templates/primary/statefulset.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: release-name-postgres
+  namespace: "default"
+  labels:
+    app.kubernetes.io/name: postgres
+    helm.sh/chart: postgres-11.6.10
+    app.kubernetes.io/instance: release-name
+    app.kubernetes.io/managed-by: Helm
+    app.kubernetes.io/component: primary
+  annotations:
+spec:
+  replicas: 1
+  serviceName: release-name-postgres-hl
+  updateStrategy:
+    rollingUpdate: {}
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: postgres
+      app.kubernetes.io/instance: release-name
+      app.kubernetes.io/component: primary
+  template:
+    metadata:
+      name: release-name-postgres
+      labels:
+        app.kubernetes.io/name: postgres
+        helm.sh/chart: postgres-11.6.10
+        app.kubernetes.io/instance: release-name
+        app.kubernetes.io/managed-by: Helm
+        app.kubernetes.io/component: primary
+      annotations:
+    spec:
+      serviceAccountName: default
+
+      affinity:
+        podAffinity:
+
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app.kubernetes.io/name: postgres
+                    app.kubernetes.io/instance: release-name
+                    app.kubernetes.io/component: primary
+                namespaces:
+                  - "default"
+                topologyKey: kubernetes.io/hostname
+              weight: 1
+        nodeAffinity:
+
+      securityContext:
+        fsGroup: 1001
+      hostNetwork: false
+      hostIPC: false
+      initContainers:
+      containers:
+        - name: postgresql
+          image: docker.io/bitnami/postgresql:12.10.0
+          imagePullPolicy: "IfNotPresent"
+          securityContext:
+            runAsUser: 1001
+          env:
+            - name: BITNAMI_DEBUG
+              value: "false"
+            - name: POSTGRESQL_PORT_NUMBER
+              value: "5432"
+            - name: POSTGRESQL_VOLUME_DIR
+              value: "/bitnami/postgresql"
+            - name: PGDATA
+              value: "/bitnami/postgresql/data"
+            # Authentication
+            - name: POSTGRES_USER
+              value: "flowable"
+            - name: POSTGRES_POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: release-name-postgres
+                  key: postgres-password
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: release-name-postgres
+                  key: password
+            - name: POSTGRES_DB
+              value: "flowable"
+            # Replication
+            # Initdb
+            # Standby
+            # LDAP
+            - name: POSTGRESQL_ENABLE_LDAP
+              value: "no"
+            # TLS
+            - name: POSTGRESQL_ENABLE_TLS
+              value: "no"
+            # Audit
+            - name: POSTGRESQL_LOG_HOSTNAME
+              value: "false"
+            - name: POSTGRESQL_LOG_CONNECTIONS
+              value: "false"
+            - name: POSTGRESQL_LOG_DISCONNECTIONS
+              value: "false"
+            - name: POSTGRESQL_PGAUDIT_LOG_CATALOG
+              value: "off"
+            # Others
+            - name: POSTGRESQL_CLIENT_MIN_MESSAGES
+              value: "error"
+            - name: POSTGRESQL_SHARED_PRELOAD_LIBRARIES
+              value: "pgaudit"
+          ports:
+            - name: tcp-postgresql
+              containerPort: 5432
+          livenessProbe:
+            failureThreshold: 6
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 5
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - exec pg_isready -U "flowable" -d "dbname=flowable" -h 127.0.0.1 -p 5432
+          readinessProbe:
+            failureThreshold: 6
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 5
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - -e
+
+                - |
+                  exec pg_isready -U "flowable" -d "dbname=flowable" -h 127.0.0.1 -p 5432
+                  [ -f /opt/bitnami/postgresql/tmp/.initialized ] || [ -f /bitnami/postgresql/.initialized ]
+          resources:
+            limits: {}
+            requests:
+              cpu: 250m
+              memory: 256Mi
+          volumeMounts:
+            - name: dshm
+              mountPath: /dev/shm
+            - name: data
+              mountPath: /bitnami/postgresql
+      volumes:
+        - name: dshm
+          emptyDir:
+            medium: Memory
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes:
+          - "ReadWriteOnce"
+        resources:
+          requests:
+            storage: "8Gi"
+---
+# Source: flowable/templates/ingress.yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: release-name-ingress
+  labels:
+    app.kubernetes.io/name: release-name-ingress
+    helm.sh/chart: flowable-3.12.0
+    app.kubernetes.io/instance: release-name
+    app.kubernetes.io/managed-by: Helm
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt
+    kubernetes.io/ingress.class: nginx
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      proxy_set_header Upgrade $http_upgrade;
+      proxy_set_header Connection "Upgrade";
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    nginx.ingress.kubernetes.io/send-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-body-size: "20m"
+
+spec:
+  rules:
+  - host: work.release-name.flowable.com
+    http:
+      paths:
+      - path: /flowable-work
+        pathType: "Prefix"
+        backend:
+          service:
+            name: release-name-work
+            port:
+              number: 8080
+  - host: control.release-name.flowable.com
+    http:
+      paths:
+      - path: /
+        pathType: "Prefix"
+        backend:
+          service:
+            name: release-name-control
+            port:
+              number: 8080
+---
+# Source: flowable/charts/elasticsearch/templates/test/test-elasticsearch-health.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "release-name-bfcjo-test"
+  annotations:
+    "helm.sh/hook": test
+    "helm.sh/hook-delete-policy": hook-succeeded
+spec:
+  securityContext:
+    fsGroup: 1000
+    runAsUser: 1000
+  containers:
+  - name: "release-name-aytka-test"
+    image: "docker.elastic.co/elasticsearch/elasticsearch:7.17.3"
+    imagePullPolicy: "IfNotPresent"
+    command:
+      - "sh"
+      - "-c"
+      - |
+        #!/usr/bin/env bash -e
+        curl -XGET --fail 'flowable-elasticsearch-master:9200/_cluster/health?wait_for_status=green&timeout=1s'
+  restartPolicy: Never
+---
+# Source: flowable/templates/tests/flowable-control-test-connection.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "release-name-flowable-control-test-connection"
+  annotations:
+    "helm.sh/hook": test
+spec:
+  containers:
+    - name: wget
+      image: busybox
+      command: ['wget']
+      args: ["-q", "http://release-name-control:8080/actuator/health"]
+  restartPolicy: Never
+---
+# Source: flowable/templates/tests/flowable-work-test-connection.yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "release-name-flowable-work-test-connection"
+  annotations:
+    "helm.sh/hook": test
+spec:
+  containers:
+    - name: wget
+      image: busybox
+      command: ['wget']
+      args: ["-q", "http://release-name-work:8080/actuator/health"]
+  restartPolicy: Never

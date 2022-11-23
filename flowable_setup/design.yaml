@@ -1,0 +1,70 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: flowable-design
+  labels:
+    app: flowable-design
+spec:
+  ports:
+  - name: http
+    port: 8091
+    targetPort: 8091
+  selector:
+    app: flowable-design
+  type: LoadBalancer
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: flowable-design
+spec:
+  selector:
+    matchLabels:
+      app: flowable-design
+  template:
+    metadata:
+      labels:
+        app: flowable-design
+    spec:
+      containers:
+      - env:
+        - name: flowable.common.app.idm-admin.user
+          value: admin
+        - name: flowable.common.app.idm-admin.password
+          value: test 
+        - name: flowable.common.app.idm-url
+          value: http://flowable-work:8090
+        - name: flowable.modeler.app.deployment-api-url
+          value: http://flowable-work:8080/app-api 
+        - name: flowable.modeler.app.undeployment-api-url 
+          value: http://flowable-work:8080/platform-api/app-deployments 
+        - name: server.servlet.context-path
+          value: /
+        - name: spring.datasource.driver-class-name
+          value: org.postgresql.Driver
+        - name: spring.datasource.url
+          value: jdbc:postgresql://engage-poc-dev-pg3.postgres.database.azure.com:5432/flowable
+        - name: spring.datasource.username 
+          value: postgres@engage-poc-dev-pg3
+        - name: spring.datasource.password
+          value: engage123!          
+        image: artifacts.flowable.com/flowable/flowable-design:latest
+        name: flowable-design
+        imagePullPolicy: IfNotPresent
+        ports:
+        - name: http
+          containerPort: 8091
+      imagePullSecrets:
+        - name: quickstart-flowable-regcred
+     
+
+     
+      
+   
+     
+     
+     
+     
+   
+
+

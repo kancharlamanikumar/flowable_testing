@@ -1,0 +1,135 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: "flow4xflow-work"
+  labels:
+    app: "flow4xflow-work"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: "flow4xflow-work"
+  serviceName: "flow4xflow-work"
+  podManagementPolicy: Parallel
+  template:
+    metadata:
+      labels:
+        app: "flow4xflow-work"
+    spec:
+      containers:
+      - name: "flow4xflow-work"
+        image: "lin-k8s-registry.ams.com/00cgiadvantage/flowwork:2022.FS3.2"
+        resources: 
+          requests:
+            memory: "3Gi"
+            cpu: "100m"
+          limits:
+            memory: "8Gi"
+            cpu: "4000m"
+        ports:
+        - containerPort: 8080
+        env:
+        - name: MAX_HEAP
+          value: "4096m"
+        - name: MIN_HEAP
+          value: "4096m"
+        - name: CTX_ROOT
+          value: "flowable-work"
+        - name: ING_HOST
+          value: "http://engage-poc-dev-mgmtvm.eastus2.cloudapp.azure.com:443"
+        - name: "APPLICATION_ROLE"
+          value: "jobmanager"
+        - name: "FLOW_CONTROL_CTX_ROOT"
+          value: "flowable-control"
+        - name: "FLOW_WORK_CTX_ROOT"
+          value: "flowable-work"
+        - name: "FLOW_DESIGN_CTX_ROOT"
+          value: "flowable-design"
+        - name: "JAVA_OPTS"
+          value: " "
+        - name: "TZ"
+          value: "US/Eastern"
+        - name: "DB_TYPE"
+          value: "sqlserver"
+        - name: "DB_VERSION"
+          value: ""
+        - name: "SESSION_TIMEOUT"
+          value: "600"
+        - name: "MAX_SESSION"
+          value: ""
+        - name: "REDIS_HOST_PORT"
+          value: "release-name-redis-ha.redis:6379"
+        - name: "ELASTIC_HOST_PORT"
+          value: "10.244.0.182:9200"
+        - name: "LOG_LEVEL"
+          value: "INFO"
+        - name: "VLSOUT_LOG_LEVEL"
+          value: "SEVERE"
+        - name: "CUSTOMIZATIONFOLDER"
+          value: "Custom"
+        - name: "DEPLOYEDTOPOLOGY"
+          value: "LAN"
+        - name: "PRODUCTTABTITLE"
+          value: "CGIAdvantageFlow"
+        - name: "ENV_NAME"
+          value: "flow-2022.FS3.2-SHK.0"
+        - name: "JOB_THREAD_COUNT"
+          value: "4"
+        - name: "SECRET_MANAGEMENT"
+          value: "k8s"
+        - name: "MFLICFILE"
+          value: "/apps/CGIADV/hrm/sets/CS-Docker-Prod-2797552.mflic"
+        - name: "ADV_USER"
+          valueFrom:
+            secretKeyRef:
+              name: "flow4xflow-work-application-user"
+              key: "ADV_USER"
+        - name: "ADV_PASS"
+          valueFrom:
+            secretKeyRef:
+              name: "flow4xflow-work-application-user"
+              key: "ADV_PASS"
+        - name: "SUBVALUSER"
+          valueFrom:
+            secretKeyRef:
+              name: "flow4xflow-work-db-secret"
+              key: "SUBVALUSER"
+        - name: "SUBVALPASSWORD"
+          valueFrom:
+            secretKeyRef:
+              name: "flow4xflow-work-db-secret"
+              key: "SUBVALPASSWORD"
+        - name: "FLOW_LOGIN"
+          valueFrom:
+            secretKeyRef:
+              name: "flow4xflow-work-db-secret"
+              key: "FLOW_LOGIN"
+        - name: "FLOW_DATABASE"
+          valueFrom:
+            secretKeyRef:
+              name: "flow4xflow-work-db-secret"
+              key: "FLOW_DATABASE"
+        - name: "FLOW_SCHEMA"
+          valueFrom:
+            secretKeyRef:
+              name: "flow4xflow-work-db-secret"
+              key: "FLOW_SCHEMA"
+        - name: "FLOW_PASSWORD"
+          valueFrom:
+            secretKeyRef:
+              name: "flow4xflow-work-db-secret"
+              key: "FLOW_PASSWORD"
+        - name: "FLOW_HOST"
+          valueFrom:
+            secretKeyRef:
+              name: "flow4xflow-work-db-secret"
+              key: "FLOW_HOST"
+        - name: "FLOW_PORT"
+          valueFrom:
+            secretKeyRef:
+              name: "flow4xflow-work-db-secret"
+              key: "FLOW_PORT"
+        imagePullPolicy: IfNotPresent
+      securityContext:
+        runAsGroup: 1004
+        runAsUser: 185

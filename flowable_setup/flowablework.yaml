@@ -1,0 +1,61 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: flowable-work
+  labels:
+    app: flowable-work
+spec:
+  ports:
+  - name: http
+    port: 8090
+    targetPort: 8090
+  selector:
+    app: flowable-work
+  type: LoadBalancer
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: flowable-work
+spec:
+  selector:
+    matchLabels:
+      app: flowable-work
+  template:
+    metadata:
+      labels:
+        app: flowable-work
+    spec:
+      containers:
+      - env:
+        - name: flowable.content.storage.root-folder
+          value: /content-storage
+        - name: server.servlet.context-path
+          value: / 
+        - name: spring.elasticsearch.uris
+          value: http://20.85.118.83:9200
+        - name: spring.datasource.driver-class-name
+          value: org.postgresql.Driver
+        - name: spring.datasource.url
+          value: jdbc:postgresql://engage-poc-dev-pg3.postgres.database.azure.com:5432/flowable
+        - name: spring.datasource.username 
+          value: postgres@engage-poc-dev-pg3
+        - name: spring.datasource.password
+          value: engage123!          
+        image: artifacts.flowable.com/flowable/flowable-work
+        imagePullPolicy: IfNotPresent
+        name: flowable-work
+        ports:
+        - name: http
+          containerPort: 8090
+      imagePullSecrets:
+        - name: quickstart-flowable-regcred
+     
+     
+     
+     
+     
+     
+   
+
+

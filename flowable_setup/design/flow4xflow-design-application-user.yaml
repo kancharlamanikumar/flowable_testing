@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: Secret
+type: Opaque
+metadata:
+  name: "flow4xflow-design-application-user"
+data:
+  "ADV_USER": "c2E="
+  "ADV_PASS": "YWR2YW50YWdl"
